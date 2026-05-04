@@ -1,0 +1,77 @@
+# ============================================================
+# sample_logs/mixed.log
+# Realistic mixed log file — JSON-structured, one entry per line.
+# Covers: INFO baseline → WARN degradation → ERROR spike → FATAL
+# Used by: ./inject_logs.sh file sample_logs/mixed.log
+# ============================================================
+
+# ── Normal baseline ──────────────────────────────────────────
+{"timestamp":"2024-08-01T09:00:01Z","level":"INFO","service":"api-gateway","msg":"GET /api/v1/health 200 OK","latency_ms":8,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:00:03Z","level":"INFO","service":"auth-service","msg":"User login successful","user_id":"u-1001","method":"oauth2","host":"auth-01"}
+{"timestamp":"2024-08-01T09:00:05Z","level":"INFO","service":"api-gateway","msg":"GET /api/v1/products 200 OK","latency_ms":22,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:00:07Z","level":"INFO","service":"order-service","msg":"Order created","order_id":"ord-8801","amount":299.99,"currency":"CAD","host":"order-01"}
+{"timestamp":"2024-08-01T09:00:09Z","level":"INFO","service":"payment-service","msg":"Payment authorised","provider":"stripe","amount":299.99,"order_id":"ord-8801","host":"pay-01"}
+{"timestamp":"2024-08-01T09:00:11Z","level":"INFO","service":"inventory","msg":"Stock reserved","sku":"SKU-007","qty":1,"remaining":99,"host":"inv-01"}
+{"timestamp":"2024-08-01T09:00:13Z","level":"INFO","service":"notification","msg":"Order confirmation email sent","recipient":"user@example.com","order_id":"ord-8801"}
+{"timestamp":"2024-08-01T09:00:15Z","level":"INFO","service":"api-gateway","msg":"POST /api/v1/orders 201 Created","latency_ms":38,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:00:17Z","level":"INFO","service":"api-gateway","msg":"GET /api/v1/users/u-1001 200 OK","latency_ms":14,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:00:19Z","level":"INFO","service":"search-service","msg":"Search query executed","query":"running shoes","results":42,"latency_ms":67}
+{"timestamp":"2024-08-01T09:00:21Z","level":"INFO","service":"auth-service","msg":"Token refreshed","user_id":"u-2031","host":"auth-01"}
+{"timestamp":"2024-08-01T09:00:23Z","level":"INFO","service":"api-gateway","msg":"GET /api/v1/cart/c-5512 200 OK","latency_ms":11,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:00:25Z","level":"INFO","service":"recommendation","msg":"Recommendations generated","user_id":"u-1001","algo":"collaborative-filter","count":10}
+{"timestamp":"2024-08-01T09:00:27Z","level":"INFO","service":"order-service","msg":"Order created","order_id":"ord-8802","amount":59.00,"currency":"CAD","host":"order-01"}
+{"timestamp":"2024-08-01T09:00:29Z","level":"INFO","service":"payment-service","msg":"Payment authorised","provider":"stripe","amount":59.00,"order_id":"ord-8802","host":"pay-01"}
+
+# ── Early warnings — latency and cache pressure ───────────────
+{"timestamp":"2024-08-01T09:01:00Z","level":"WARN","service":"cache-layer","msg":"Cache hit rate dropped below 80%","hit_rate_pct":74.2,"window":"5m","host":"cache-01"}
+{"timestamp":"2024-08-01T09:01:05Z","level":"WARN","service":"api-gateway","msg":"Upstream response slow","upstream":"payment-service","latency_ms":980,"threshold_ms":500}
+{"timestamp":"2024-08-01T09:01:10Z","level":"WARN","service":"db-pool","msg":"Connection pool utilisation high","pool_size":20,"in_use":17,"host":"db-01"}
+{"timestamp":"2024-08-01T09:01:15Z","level":"INFO","service":"api-gateway","msg":"GET /api/v1/health 200 OK","latency_ms":9,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:01:20Z","level":"WARN","service":"payment-service","msg":"Stripe API p99 latency elevated","p99_ms":820,"baseline_ms":200,"host":"pay-01"}
+{"timestamp":"2024-08-01T09:01:25Z","level":"WARN","service":"api-gateway","msg":"Rate limit approaching","client_ip":"203.0.113.42","current_rpm":910,"limit_rpm":1000}
+{"timestamp":"2024-08-01T09:01:30Z","level":"WARN","service":"auth-service","msg":"Repeated login failures for account","user_id":"u-3391","attempts":5,"window":"60s"}
+{"timestamp":"2024-08-01T09:01:35Z","level":"WARN","service":"inventory","msg":"Low stock alert","sku":"SKU-019","remaining":3,"threshold":5}
+{"timestamp":"2024-08-01T09:01:40Z","level":"WARN","service":"message-broker","msg":"Consumer lag increasing","topic":"payments","group":"order-consumer","lag":1200}
+{"timestamp":"2024-08-01T09:01:45Z","level":"WARN","service":"node-metrics","msg":"CPU load elevated","cpu_pct":72.1,"host":"worker-01"}
+
+# ── Error spike — payment service degrading ───────────────────
+{"timestamp":"2024-08-01T09:02:00Z","level":"ERROR","service":"payment-service","msg":"Stripe API request failed: connection timeout","timeout_ms":5000,"request_id":"stripe-req-001","host":"pay-01"}
+{"timestamp":"2024-08-01T09:02:02Z","level":"ERROR","service":"payment-service","msg":"Stripe API request failed: connection timeout","timeout_ms":5000,"request_id":"stripe-req-002","host":"pay-01"}
+{"timestamp":"2024-08-01T09:02:04Z","level":"ERROR","service":"payment-service","msg":"Stripe API request failed: connection timeout","timeout_ms":5000,"request_id":"stripe-req-003","host":"pay-02"}
+{"timestamp":"2024-08-01T09:02:06Z","level":"ERROR","service":"payment-service","msg":"Payment failed — max retries exhausted","order_id":"ord-8810","provider":"stripe","retries":3,"host":"pay-01"}
+{"timestamp":"2024-08-01T09:02:08Z","level":"ERROR","service":"order-service","msg":"Downstream payment-service call failed","status":503,"circuit_state":"HALF-OPEN","host":"order-01"}
+{"timestamp":"2024-08-01T09:02:10Z","level":"ERROR","service":"api-gateway","msg":"POST /api/v1/orders 503 Service Unavailable","latency_ms":5011,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:02:12Z","level":"ERROR","service":"api-gateway","msg":"POST /api/v1/orders 503 Service Unavailable","latency_ms":5023,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:02:14Z","level":"ERROR","service":"db-pool","msg":"Connection pool exhausted — queries queuing","pool_size":20,"waiting":31,"oldest_wait_ms":4200,"host":"db-01"}
+{"timestamp":"2024-08-01T09:02:16Z","level":"ERROR","service":"cache-layer","msg":"Redis primary unresponsive — promoting replica","primary":"redis-0","replica":"redis-1","host":"cache-01"}
+{"timestamp":"2024-08-01T09:02:18Z","level":"ERROR","service":"session-store","msg":"Session write failed","user_id":"u-4412","error":"READONLY You can't write against a read only replica","host":"session-01"}
+{"timestamp":"2024-08-01T09:02:20Z","level":"ERROR","service":"api-gateway","msg":"GET /api/v1/cart/c-6631 500 Internal Server Error","latency_ms":3200,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:02:22Z","level":"ERROR","service":"node-metrics","msg":"CPU load critical","cpu_pct":91.7,"host":"worker-01","threshold_pct":85}
+{"timestamp":"2024-08-01T09:02:24Z","level":"ERROR","service":"node-metrics","msg":"CPU load critical","cpu_pct":89.3,"host":"worker-02","threshold_pct":85}
+{"timestamp":"2024-08-01T09:02:26Z","level":"ERROR","service":"order-service","msg":"Circuit breaker OPEN — payment-service","failure_rate_pct":100,"window":"30s","host":"order-01"}
+{"timestamp":"2024-08-01T09:02:28Z","level":"ERROR","service":"api-gateway","msg":"POST /api/v1/checkout 503 Service Unavailable","latency_ms":100,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:02:30Z","level":"ERROR","service":"payment-service","msg":"Stripe webhook delivery failed","event":"charge.failed","attempts":5,"host":"pay-02"}
+
+# ── Full meltdown — fatal-level events ───────────────────────
+{"timestamp":"2024-08-01T09:03:00Z","level":"FATAL","service":"payment-service","msg":"Process crashed — unhandled exception in stripe client","exception":"NullPointerException","thread":"payment-worker-3","host":"pay-01"}
+{"timestamp":"2024-08-01T09:03:02Z","level":"ERROR","service":"k8s-node","msg":"Node condition NotReady","node":"worker-01","condition":"DiskPressure","pressure":"99.2%","since":"90s"}
+{"timestamp":"2024-08-01T09:03:04Z","level":"FATAL","service":"api-gateway","msg":"Worker process OOM killed by kernel","pid":8801,"rss_mb":3940,"limit_mb":4096,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:03:06Z","level":"ERROR","service":"api-gateway","msg":"All payment upstream instances unhealthy","healthy":0,"total":4}
+{"timestamp":"2024-08-01T09:03:08Z","level":"FATAL","service":"auth-service","msg":"Cannot connect to etcd — JWT key rotation unavailable","etcd_endpoint":"etcd:2379","error":"context deadline exceeded","host":"auth-01"}
+{"timestamp":"2024-08-01T09:03:10Z","level":"FATAL","service":"config-service","msg":"etcd quorum lost — serving stale config","quorum_size":3,"available":1}
+{"timestamp":"2024-08-01T09:03:12Z","level":"ERROR","service":"message-broker","msg":"Kafka leader election in progress — producer writes blocked","topic":"orders","partition":0}
+{"timestamp":"2024-08-01T09:03:14Z","level":"FATAL","service":"order-service","msg":"Panic: concurrent map write detected — shutting down","goroutine":117,"file":"order_processor.go:342","host":"order-01"}
+{"timestamp":"2024-08-01T09:03:16Z","level":"ERROR","service":"monitoring","msg":"Alertmanager cannot reach PagerDuty webhook","url":"https://events.pagerduty.com/v2/enqueue","error":"i/o timeout"}
+{"timestamp":"2024-08-01T09:03:18Z","level":"FATAL","service":"db-primary","msg":"Disk full — PostgreSQL halted all writes","volume":"/var/lib/postgresql","used_gb":500,"total_gb":500,"host":"db-01"}
+
+# ── Recovery begins ───────────────────────────────────────────
+{"timestamp":"2024-08-01T09:04:00Z","level":"WARN","service":"k8s-controller","msg":"Pod CrashLoopBackOff detected","pod":"payment-service-7d9f8b-xkq2p","restarts":5,"namespace":"production"}
+{"timestamp":"2024-08-01T09:04:10Z","level":"INFO","service":"k8s-controller","msg":"Horizontal pod autoscaler scaling up","deployment":"api-gateway","from":2,"to":4}
+{"timestamp":"2024-08-01T09:04:20Z","level":"INFO","service":"payment-service","msg":"Pod restarted and ready","pod":"payment-service-7d9f8b-new01","host":"worker-03"}
+{"timestamp":"2024-08-01T09:04:30Z","level":"INFO","service":"order-service","msg":"Circuit breaker CLOSED — payment-service recovering","host":"order-01"}
+{"timestamp":"2024-08-01T09:04:40Z","level":"INFO","service":"api-gateway","msg":"POST /api/v1/orders 201 Created","latency_ms":51,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:04:50Z","level":"INFO","service":"payment-service","msg":"Payment authorised","provider":"stripe","host":"pay-03"}
+{"timestamp":"2024-08-01T09:05:00Z","level":"INFO","service":"node-metrics","msg":"CPU load returning to normal","cpu_pct":41.2,"host":"worker-01"}
+{"timestamp":"2024-08-01T09:05:10Z","level":"INFO","service":"cache-layer","msg":"Redis replication healthy","primary":"redis-1","replicas":2}
+{"timestamp":"2024-08-01T09:05:20Z","level":"INFO","service":"api-gateway","msg":"GET /api/v1/health 200 OK","latency_ms":7,"host":"gw-01"}
+{"timestamp":"2024-08-01T09:05:30Z","level":"INFO","service":"monitoring","msg":"All systems operational — incident resolved","duration_mins":3,"affected_services":["payment-service","order-service","api-gateway"]}

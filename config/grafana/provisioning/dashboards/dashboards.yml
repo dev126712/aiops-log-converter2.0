@@ -1,0 +1,15 @@
+# ============================================================
+# config/grafana/provisioning/dashboards/dashboards.yml
+# Tells Grafana to load any .json files in /dashboards on boot.
+# ============================================================
+apiVersion: 1
+
+providers:
+  - name:            AIOps
+    orgId:           1
+    type:            file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

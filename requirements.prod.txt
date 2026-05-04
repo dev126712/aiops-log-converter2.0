@@ -1,0 +1,16 @@
+# ============================================================
+# AIOps Pipeline — Production Requirements
+# No LLM SDK needed — Groq and Ollama called via plain requests
+# ============================================================
+
+requests==2.32.3
+tenacity==8.3.0
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.0
+redis==5.0.6
+pymongo==4.7.3
+structlog==24.2.0
+prometheus-client==0.20.0
+python-dotenv==1.0.1
+pydantic==2.7.1

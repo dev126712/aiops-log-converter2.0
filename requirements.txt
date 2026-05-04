@@ -1,0 +1,42 @@
+# ============================================================
+# AIOps Pipeline — Production Requirements
+# Python 3.11+
+# ============================================================
+
+# ── Core HTTP ────────────────────────────────────────────────
+requests==2.32.3
+urllib3==2.2.2
+
+# ── Retry / resilience ───────────────────────────────────────
+tenacity==8.3.0          # exponential back-off on all HTTP calls
+
+# ── Data / ML ────────────────────────────────────────────────
+pandas==2.2.2
+numpy==1.26.4            # pinned; avoids sklearn/pandas ABI conflicts
+scikit-learn==1.5.0
+
+# ── LLM ──────────────────────────────────────────────────────
+google-generativeai==0.8.3
+
+# ── Storage ──────────────────────────────────────────────────
+redis==5.0.6             # async-capable; includes hiredis auto-detection
+pymongo==4.7.3
+motor==3.4.0             # async MongoDB driver (ready for future async refactor)
+
+# ── Structured logging ───────────────────────────────────────
+structlog==24.2.0        # JSON-first, Loki/Fluentd compatible
+
+# ── Self-observability ───────────────────────────────────────
+prometheus-client==0.20.0   # exposes /metrics for the pipeline itself
+
+# ── Config / secrets ─────────────────────────────────────────
+python-dotenv==1.0.1     # .env support for local dev; no-op in prod
+
+# ── Validation ───────────────────────────────────────────────
+pydantic==2.7.1          # strongly-typed config + data contracts
+
+# ── Testing (keep separate in CI, included here for simplicity) ──
+pytest==8.2.2
+pytest-mock==3.14.0
+responses==0.25.3        # mock requests in unit tests
+freezegun==1.5.1         # deterministic datetime in tests

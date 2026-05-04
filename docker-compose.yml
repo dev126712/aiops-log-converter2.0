@@ -1,0 +1,200 @@
+# ============================================================
+# docker-compose.yml
+# Local dev stack — Groq as LLM (no Ollama — insufficient RAM)
+# Ollama will be added back when deploying to K8s GPU node.
+# ============================================================
+
+networks:
+  aiops-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  redis-data:
+  loki-data:
+  prometheus-data:
+  grafana-data:
+
+
+services:
+
+  # ── Redis ─────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: aiops-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - aiops-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379"
+
+
+  # ── MongoDB ───────────────────────────────────────────────
+  mongodb:
+    image: mongo:4.4
+    container_name: aiops-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-aiops}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme_in_prod}
+      MONGO_INITDB_DATABASE: aiops
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - aiops-net
+    healthcheck:
+      test: ["CMD-SHELL", "mongo --quiet --username aiops --password changeme_in_prod --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\""]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    ports:
+      - "27017:27017"
+
+
+  # ── Loki ──────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: aiops-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    networks:
+      - aiops-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "3100:3100"
+
+
+  # ── Promtail ──────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:2.9.8
+    container_name: aiops-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./config/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    networks:
+      - aiops-net
+    depends_on:
+      loki:
+        condition: service_healthy
+
+
+  # ── Prometheus ────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: aiops-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - aiops-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "9090:9090"
+
+
+  # ── Grafana ───────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.3
+    container_name: aiops-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER:     ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-changeme_in_prod}
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - aiops-net
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+
+  # ── AIOps Pipeline ────────────────────────────────────────
+  aiops-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aiops-pipeline
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      LOKI_URL:           "http://loki:3100"
+      PROMETHEUS_URL:     "http://prometheus:9090"
+      REDIS_URI:          "redis://redis:6379/0"
+      MONGO_URI:          "mongodb://${MONGO_USER:-aiops}:${MONGO_PASSWORD:-changeme_in_prod}@mongodb:27017/"
+      DEPLOYMENT_ENV:     "server"
+      FETCH_WINDOW_MINS:  "5"
+      LOG_FETCH_LIMIT:    "200"
+      REQUEST_TIMEOUT:    "10"
+      LOG_FORMAT:         "json"
+      PIPELINE_INTERVAL:  "300"   # 5 min between runs — stays within Groq free tier
+    networks:
+      - aiops-net
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    volumes:
+      - /tmp/aiops:/tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "512M"
+        reservations:
+          cpus: "0.25"
+          memory: "256M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "aiops-pipeline"
