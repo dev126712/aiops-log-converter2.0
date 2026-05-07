@@ -186,7 +186,7 @@ def call_groq(prompt: str) -> str:
     payload = {
         "model": Config.GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1000,
+        "max_tokens": 4000,
         "temperature": 0.1    # low temp = more deterministic JSON output
     }
 
@@ -311,13 +311,16 @@ class ObservabilityFetcher:
 # ---------------------------------------------------------------------------
 
 def normalize_logs(observability_data: dict) -> pd.DataFrame:
-    logs_text    = "\n".join(observability_data["logs"])
+    logs    = "\n".join(observability_data["logs"])
     metrics_text = observability_data["metrics"]
 
     # Guard: IsolationForest needs at least 10 samples to be meaningful
-    if len(observability_data["logs"]) < 10:
-        logger.warning(f"Too few log lines ({len(observability_data['logs'])}) — skipping normalization")
+    if len(logs) < 10:
+        logger.warning(f"Too few log lines ({len(logs)}) — skipping normalization")
         return pd.DataFrame()
+
+    logs = logs[-50:]
+    logs_text = "\n".join(logs)
 
     prompt = f"""
     You are an AIOps expert. Analyze the system state below and return ONLY a
@@ -337,10 +340,29 @@ def normalize_logs(observability_data: dict) -> pd.DataFrame:
 
     try:
         raw = call_llm(prompt).strip()
-        # Strip accidental markdown fences
-        if raw.startswith("```"):
-            raw = raw.split("```")[1].lstrip("json").strip()
-        df = pd.read_json(raw)
+        logger.info(f"RAW LLM RESPONSE: {repr(raw[:500])}")
+        # Strip markdown fences — handle ```json, ```JSON, ``` etc.
+        if "```" in raw:
+            parts = raw.split("```")
+            # Find the part that looks like JSON (starts with [ or {)
+            for part in parts:
+                part = part.lstrip("json").lstrip("JSON").strip()
+                if part.startswith("[") or part.startswith("{"):
+                    raw = part
+                    break
+        # Also strip any trailing explanation text after the JSON array
+        if raw.startswith("["):
+            end = raw.rfind("]")
+            if end != -1:
+                raw = raw[:end+1]
+        import io
+        if not raw.endswith("]"):
+            last_complete = raw.rfind("},")
+            if last_complete != -1:
+                raw = raw[:last_complete+1] + "]"
+            else:
+                raise ValueError(f"Response truncated and unrecoverable")
+        df = pd.read_json(io.StringIO(raw))
         logger.info(f"LLM normalized {len(df)} log entries successfully")
         return df
     except Exception as e:
